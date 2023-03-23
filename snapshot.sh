@@ -46,7 +46,7 @@ IMAGES="$1"
 set -u
 
 AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-}
-AMI_ID=${AMI_ID:-/aws/service/bottlerocket/aws-k8s-1.24/x86_64/latest/image_id}
+AMI_ID=${AMI_ID:-/aws/service/bottlerocket/aws-k8s-1.25/x86_64/latest/image_id}
 INSTANCE_TYPE=${INSTANCE_TYPE:-t2.small}
 
 if [ -z "${AWS_DEFAULT_REGION}" ]; then
@@ -116,4 +116,5 @@ aws cloudformation delete-stack --stack-name "Bottlerocket-ebs-snapshot"
 
 # done!
 echo "--------------------------------------------------"
-echo "All done! Created snapshot in $AWS_DEFAULT_REGION: $SNAPSHOT_ID"
+export EBS_SNAPSHOT_ID=$SNAPSHOT_ID
+echo "All done! Created snapshot in $AWS_DEFAULT_REGION: $EBS_SNAPSHOT_ID"
