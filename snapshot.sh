@@ -110,9 +110,9 @@ DATA_VOLUME_ID=$(aws ec2 describe-instances  --instance-id $INSTANCE_ID --query 
 SNAPSHOT_ID=$(aws ec2 create-snapshot --volume-id $DATA_VOLUME_ID --description "Bottlerocket Data Volume snapshot" --query "SnapshotId" --output text)
 aws ec2 wait snapshot-completed --snapshot-ids "$SNAPSHOT_ID" > /dev/null && echo "done!"
 
-aws ec2 enable-fast-snapshot-restores \
-    --availability-zones ${AWS_DEFAULT_REGION}a ${AWS_DEFAULT_REGION}b ${AWS_DEFAULT_REGION}c \
-    --source-snapshot-ids $SNAPSHOT_ID
+# aws ec2 enable-fast-snapshot-restores \
+#     --availability-zones ${AWS_DEFAULT_REGION}a ${AWS_DEFAULT_REGION}b ${AWS_DEFAULT_REGION}c \
+#     --source-snapshot-ids $SNAPSHOT_ID
 
 # destroy temporary instance
 echo "[6/6] Cleanup."
