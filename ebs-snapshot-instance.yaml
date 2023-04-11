@@ -2,6 +2,8 @@ AWSTemplateFormatVersion: 2010-09-09
 Description: Bottlerocket instance to snashot data volume.
 
 Parameters:
+  SubnetID:
+    Type: String
   AmiID:
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
     Description: "The ID of the AMI."
@@ -17,6 +19,7 @@ Resources:
     Properties:
       ImageId: !Ref AmiID
       InstanceType: !Ref InstanceType
+      SubnetId: !Ref SubnetID
       IamInstanceProfile: !Ref BottlerocketNodeInstanceProfile
       UserData:
         Fn::Base64: |

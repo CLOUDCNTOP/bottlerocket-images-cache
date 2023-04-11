@@ -9,6 +9,7 @@ function print_help {
     echo "-r,--region Set AWS region to build the EBS snapshot, (default: use environment variable of AWS_DEFAULT_REGION)"
     echo "-a,--ami Set SSM Parameter path for Bottlerocket ID, (default: /aws/service/bottlerocket/aws-k8s-1.21/x86_64/latest/image_id)"
     echo "-i,--instance-type Set EC2 instance type to build this snapshot, (default: t2.small)"
+    echo "-s,--subnet Set where to host EC2 instance"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -33,6 +34,11 @@ while [[ $# -gt 0 ]]; do
             shift
             shift
             ;;
+        -s|--subnet)
+            SUBNET_ID=$2
+            shift
+            shift
+            ;;            
         *)    # unknown option
             POSITIONAL+=("$1") # save it in an array for later
             shift # past argument
@@ -48,6 +54,8 @@ set -u
 AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-}
 AMI_ID=${AMI_ID:-/aws/service/bottlerocket/aws-k8s-1.25/x86_64/latest/image_id}
 INSTANCE_TYPE=${INSTANCE_TYPE:-t2.small}
+SUBNET_ID=${SUBNET_ID}
+
 
 if [ -z "${AWS_DEFAULT_REGION}" ]; then
     echo "Please set AWS region"
@@ -56,6 +64,11 @@ fi
 
 if [ -z "${IMAGES}" ]; then
     echo "Please set images list"
+    exit 1
+fi
+
+if [ -z "${SUBNET_ID}" ]; then
+    echo "Please set subnet"
     exit 1
 fi
 
@@ -69,7 +82,7 @@ export AWS_PAGER=""
 echo "[1/6] Deploying EC2 CFN stack ..."
 CFN_STACK_NAME="Bottlerocket-ebs-snapshot"
 aws cloudformation deploy --stack-name $CFN_STACK_NAME --template-file ebs-snapshot-instance.yaml --capabilities CAPABILITY_NAMED_IAM \
-    --parameter-overrides AmiID=$AMI_ID InstanceType=$INSTANCE_TYPE
+    --parameter-overrides SubnetID=$SUBNET_ID AmiID=$AMI_ID InstanceType=$INSTANCE_TYPE
 INSTANCE_ID=$(aws cloudformation describe-stacks --stack-name $CFN_STACK_NAME --query "Stacks[0].Outputs[?OutputKey=='InstanceId'].OutputValue" --output text)
 
 # wait for SSM ready
