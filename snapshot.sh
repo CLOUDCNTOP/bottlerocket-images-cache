@@ -10,6 +10,7 @@ function print_help {
     echo "-a,--ami Set SSM Parameter path for Bottlerocket ID, (default: /aws/service/bottlerocket/aws-k8s-1.21/x86_64/latest/image_id)"
     echo "-i,--instance-type Set EC2 instance type to build this snapshot, (default: t2.small)"
     echo "-s,--subnet Set where to host EC2 instance"
+    echo "-c,--clean Set whether to clean existing images"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -38,7 +39,12 @@ while [[ $# -gt 0 ]]; do
             SUBNET_ID=$2
             shift
             shift
-            ;;            
+            ;;
+        -c|--clean)
+            IS_CLEAN=$2
+            shift
+            shift
+            ;;                        
         *)    # unknown option
             POSITIONAL+=("$1") # save it in an array for later
             shift # past argument
@@ -55,7 +61,7 @@ AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-}
 AMI_ID=${AMI_ID:-/aws/service/bottlerocket/aws-k8s-1.25/x86_64/latest/image_id}
 INSTANCE_TYPE=${INSTANCE_TYPE:-t2.small}
 SUBNET_ID=${SUBNET_ID}
-
+IS_CLEAN=${IS_CLEAN:-false}
 
 if [ -z "${AWS_DEFAULT_REGION}" ]; then
     echo "Please set AWS region"
@@ -94,15 +100,18 @@ do
 done
 echo " done!"
 
-# pull images
-echo "[3/6] Pulling ECR images:"
-CMD_CLEAN_ID=$(aws ssm send-command --instance-ids $INSTANCE_ID \
-        --document-name "AWS-RunShellScript" --comment "Clean Existing Images" \
-        --parameters commands="apiclient exec admin sheltie ctr -n k8s.io images rm \$(apiclient exec admin sheltie ctr -n k8s.io images ls -q)" \
-        --cloud-watch-output-config "CloudWatchOutputEnabled=true" \
-        --query "Command.CommandId" --output text)
-aws ssm wait command-executed --command-id "$CMD_CLEAN_ID" --instance-id $INSTANCE_ID > /dev/null && echo "clean done"
+# clean & pull images
+if [ ${IS_CLEAN} ]; then
+    echo "Clean existing images:"
+    CMD_CLEAN_ID=$(aws ssm send-command --instance-ids $INSTANCE_ID \
+            --document-name "AWS-RunShellScript" --comment "Clean Existing Images" \
+            --parameters commands="apiclient exec admin sheltie ctr -n k8s.io images rm \$(apiclient exec admin sheltie ctr -n k8s.io images ls -q)" \
+            --cloud-watch-output-config "CloudWatchOutputEnabled=true" \
+            --query "Command.CommandId" --output text)
+    aws ssm wait command-executed --command-id "$CMD_CLEAN_ID" --instance-id $INSTANCE_ID > /dev/null && echo "clean done"
+fi
 
+echo "[3/6] Pulling ECR images:"
 for IMG in "${IMAGES_LIST[@]}"
 do
     ECR_REGION=$(echo $IMG | sed -n "s/^[0-9]*\.dkr\.ecr\.\([a-z1-9-]*\)\.amazonaws\.com.*$/\1/p")
