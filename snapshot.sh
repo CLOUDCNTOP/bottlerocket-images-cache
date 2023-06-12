@@ -96,15 +96,17 @@ echo " done!"
 
 # pull images
 echo "[3/6] Pulling ECR images:"
+CMD_CLEAN_ID=$(aws ssm send-command --instance-ids $INSTANCE_ID \
+        --document-name "AWS-RunShellScript" --comment "Clean Existing Images" \
+        --parameters commands="apiclient exec admin sheltie ctr -n k8s.io images rm \$(apiclient exec admin sheltie ctr -n k8s.io images ls -q)" \
+        --cloud-watch-output-config "CloudWatchOutputEnabled=true" \
+        --query "Command.CommandId" --output text)
+aws ssm wait command-executed --command-id "$CMD_CLEAN_ID" --instance-id $INSTANCE_ID > /dev/null && echo "clean done"
+
 for IMG in "${IMAGES_LIST[@]}"
 do
     ECR_REGION=$(echo $IMG | sed -n "s/^[0-9]*\.dkr\.ecr\.\([a-z1-9-]*\)\.amazonaws\.com.*$/\1/p")
     [ ! -z "$ECR_REGION" ] && ECRPWD="--u AWS:"$(aws ecr get-login-password --region $ECR_REGION) || ECRPWD=""
-    CMD_CLEAN_ID=$(aws ssm send-command --instance-ids $INSTANCE_ID \
-            --document-name "AWS-RunShellScript" --comment "Clean Existing Images" \
-            --parameters commands="apiclient exec admin sheltie ctr -n k8s.io i rm $(ctr -n k8s.io i ls -q)" \
-            --query "Command.CommandId" --output text)
-    aws ssm wait command-executed --command-id "$CMD_CLEAN_ID" --instance-id $INSTANCE_ID > /dev/null && echo "clean done"
     for PLATFORM in amd64 arm64
     do
         echo -n "  $IMG - $PLATFORM ... "
