@@ -100,6 +100,11 @@ for IMG in "${IMAGES_LIST[@]}"
 do
     ECR_REGION=$(echo $IMG | sed -n "s/^[0-9]*\.dkr\.ecr\.\([a-z1-9-]*\)\.amazonaws\.com.*$/\1/p")
     [ ! -z "$ECR_REGION" ] && ECRPWD="--u AWS:"$(aws ecr get-login-password --region $ECR_REGION) || ECRPWD=""
+    CMD_CLEAN_ID=$(aws ssm send-command --instance-ids $INSTANCE_ID \
+            --document-name "AWS-RunShellScript" --comment "Clean Existing Images" \
+            --parameters commands="apiclient exec admin sheltie ctr -n k8s.io i rm $(ctr -n k8s.io i ls -q)" \
+            --query "Command.CommandId" --output text)
+    aws ssm wait command-executed --command-id "$CMD_CLEAN_ID" --instance-id $INSTANCE_ID > /dev/null && echo "clean done"
     for PLATFORM in amd64 arm64
     do
         echo -n "  $IMG - $PLATFORM ... "
@@ -107,7 +112,7 @@ do
             --document-name "AWS-RunShellScript" --comment "Pull Images" \
             --parameters commands="apiclient exec admin sheltie ctr -a /run/dockershim.sock -n k8s.io images pull --platform $PLATFORM $IMG $ECRPWD" \
             --query "Command.CommandId" --output text)
-        aws ssm wait command-executed --command-id "$CMDID" --instance-id $INSTANCE_ID > /dev/null && echo "done"
+        aws ssm wait command-executed --command-id "$CMDID" --instance-id $INSTANCE_ID > /dev/null && echo "pull done"
     done
 done
 echo " done!"
