@@ -1,0 +1,6 @@
+# Ignore big files
+*.mp4
+
+.DS_Store
+package-lock.json
+.vscode
