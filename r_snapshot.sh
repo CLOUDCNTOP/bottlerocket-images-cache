@@ -60,12 +60,9 @@ set -u
 AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-}
 AMI_ID=${AMI_ID:-/aws/service/bottlerocket/aws-k8s-1.25/x86_64/latest/image_id}
 INSTANCE_TYPE=${INSTANCE_TYPE:-t2.small}
-<<<<<<< HEAD:r_snapshot.sh
 SUBNET_ID=${SUBNET_ID}
 IS_CLEAN=${IS_CLEAN:-false}
-=======
 CTR_CMD="apiclient exec admin sheltie ctr -a /run/containerd/containerd.sock -n k8s.io"
->>>>>>> 1ade8a5f40a23806d71a5eb8b44d3e0168d747cd:snapshot.sh
 
 if [ -z "${AWS_DEFAULT_REGION}" ]; then
     echo "Please set AWS region"
@@ -104,20 +101,6 @@ do
 done
 echo " done!"
 
-<<<<<<< HEAD:r_snapshot.sh
-# clean & pull images
-if [ ${IS_CLEAN} ]; then
-    echo "Clean existing images:"
-    CMD_CLEAN_ID=$(aws ssm send-command --instance-ids $INSTANCE_ID \
-            --document-name "AWS-RunShellScript" --comment "Clean Existing Images" \
-            --parameters commands="apiclient exec admin sheltie ctr -n k8s.io images rm \$(apiclient exec admin sheltie ctr -n k8s.io images ls -q)" \
-            --cloud-watch-output-config "CloudWatchOutputEnabled=true" \
-            --query "Command.CommandId" --output text)
-    aws ssm wait command-executed --command-id "$CMD_CLEAN_ID" --instance-id $INSTANCE_ID > /dev/null && echo "clean done"
-fi
-
-echo "[3/6] Pulling ECR images:"
-=======
 # stop kubelet.service
 echo -n "[3/8] Stopping kubelet.service .."
 CMDID=$(aws ssm send-command --instance-ids $INSTANCE_ID \
@@ -128,17 +111,28 @@ aws ssm wait command-executed --command-id "$CMDID" --instance-id $INSTANCE_ID >
 echo " done!"
 
 # cleanup existing images
-echo -n "[4/8] Cleanup existing images .."
-CMDID=$(aws ssm send-command --instance-ids $INSTANCE_ID \
-    --document-name "AWS-RunShellScript" --comment "Cleanup existing images" \
-    --parameters commands="$CTR_CMD images rm \$($CTR_CMD images ls -q)" \
-    --query "Command.CommandId" --output text)
-aws ssm wait command-executed --command-id "$CMDID" --instance-id $INSTANCE_ID > /dev/null
+# echo -n "[4/8] Cleanup existing images .."
+# CMDID=$(aws ssm send-command --instance-ids $INSTANCE_ID \
+#     --document-name "AWS-RunShellScript" --comment "Cleanup existing images" \
+#     --parameters commands="$CTR_CMD images rm \$($CTR_CMD images ls -q)" \
+#     --query "Command.CommandId" --output text)
+# aws ssm wait command-executed --command-id "$CMDID" --instance-id $INSTANCE_ID > /dev/null
+# echo " done!"
+if [ ${IS_CLEAN} ]; then
+    echo -n "[4/8] Cleanup existing images .."
+    CMD_CLEAN_ID=$(aws ssm send-command --instance-ids $INSTANCE_ID \
+            --document-name "AWS-RunShellScript" --comment "Clean Existing Images" \
+            --parameters commands="apiclient exec admin sheltie ctr -n k8s.io images rm \$(apiclient exec admin sheltie ctr -n k8s.io images ls -q)" \
+            --cloud-watch-output-config "CloudWatchOutputEnabled=true" \
+            --query "Command.CommandId" --output text)
+    aws ssm wait command-executed --command-id "$CMD_CLEAN_ID" --instance-id $INSTANCE_ID > /dev/null && echo "clean done"
+else
+    echo -n "[4/8] Keep existing images, do nth .."   
+fi
 echo " done!"
 
 # pull images
 echo "[5/8] Pulling ECR images:"
->>>>>>> 1ade8a5f40a23806d71a5eb8b44d3e0168d747cd:snapshot.sh
 for IMG in "${IMAGES_LIST[@]}"
 do
     ECR_REGION=$(echo $IMG | sed -n "s/^[0-9]*\.dkr\.ecr\.\([a-z1-9-]*\)\.amazonaws\.com.*$/\1/p")
@@ -148,7 +142,7 @@ do
         echo -n "  $IMG - $PLATFORM ... "
         CMDID=$(aws ssm send-command --instance-ids $INSTANCE_ID \
             --document-name "AWS-RunShellScript" --comment "Pull Images" \
-            --parameters commands="$CTR_CMD images pull --platform $PLATFORM $IMG $ECRPWD" \
+            --parameters commands="apiclient exec admin sheltie ctr -a /run/dockershim.sock -n k8s.io images pull --platform $PLATFORM $IMG $ECRPWD" \
             --query "Command.CommandId" --output text)
         aws ssm wait command-executed --command-id "$CMDID" --instance-id $INSTANCE_ID > /dev/null && echo "pull done"
     done
