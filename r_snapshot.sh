@@ -11,6 +11,7 @@ function print_help {
     echo "-i,--instance-type Set EC2 instance type to build this snapshot, (default: t2.small)"
     echo "-s,--subnet Set where to host EC2 instance"
     echo "-c,--clean Set whether to clean existing images"
+    echo "-p,--platform arm64,amd64"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -44,7 +45,12 @@ while [[ $# -gt 0 ]]; do
             IS_CLEAN=$2
             shift
             shift
-            ;;                        
+            ;;
+        -p|--platform)
+            PLATFORMS=$2
+            shift
+            shift
+            ;;            
         *)    # unknown option
             POSITIONAL+=("$1") # save it in an array for later
             shift # past argument
@@ -80,6 +86,8 @@ if [ -z "${SUBNET_ID}" ]; then
 fi
 
 IMAGES_LIST=(`echo $IMAGES | sed 's/,/\n/g'`)
+PLATFORMS=${PLATFORMS:-amd64,arm64}
+PLATFORM_LIST=(`echo $PLATFORMS | sed 's/,/\n/g'`)
 export AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION}
 
 ##############################################################################################
@@ -118,7 +126,7 @@ echo " done!"
 #     --query "Command.CommandId" --output text)
 # aws ssm wait command-executed --command-id "$CMDID" --instance-id $INSTANCE_ID > /dev/null
 # echo " done!"
-if [ ${IS_CLEAN} ]; then
+if [ ${IS_CLEAN} = true ]; then
     echo -n "[4/8] Cleanup existing images .."
     CMD_CLEAN_ID=$(aws ssm send-command --instance-ids $INSTANCE_ID \
             --document-name "AWS-RunShellScript" --comment "Clean Existing Images" \
@@ -133,21 +141,35 @@ echo " done!"
 
 # pull images
 echo "[5/8] Pulling ECR images:"
+# for IMG in "${IMAGES_LIST[@]}"
+# do
+#     ECR_REGION=$(echo $IMG | sed -n "s/^[0-9]*\.dkr\.ecr\.\([a-z1-9-]*\)\.amazonaws\.com.*$/\1/p")
+#     [ ! -z "$ECR_REGION" ] && ECRPWD="--u AWS:"$(aws ecr get-login-password --region $ECR_REGION) || ECRPWD=""
+#     for PLATFORM in amd64 arm64
+#     do
+#         echo -n "  $IMG - $PLATFORM ... "
+#         CMDID=$(aws ssm send-command --instance-ids $INSTANCE_ID \
+#             --document-name "AWS-RunShellScript" --comment "Pull Images" \
+#             --parameters commands="apiclient exec admin sheltie ctr -a /run/dockershim.sock -n k8s.io images pull --platform $PLATFORM $IMG $ECRPWD" \
+#             --query "Command.CommandId" --output text)
+#         aws ssm wait command-executed --command-id "$CMDID" --instance-id $INSTANCE_ID > /dev/null && echo "pull done"
+#     done
+# done
+# echo " done!"
 for IMG in "${IMAGES_LIST[@]}"
 do
     ECR_REGION=$(echo $IMG | sed -n "s/^[0-9]*\.dkr\.ecr\.\([a-z1-9-]*\)\.amazonaws\.com.*$/\1/p")
     [ ! -z "$ECR_REGION" ] && ECRPWD="--u AWS:"$(aws ecr get-login-password --region $ECR_REGION) || ECRPWD=""
-    for PLATFORM in amd64 arm64
+    for PLATFORM in "${PLATFORM_LIST[@]}"
     do
         echo -n "  $IMG - $PLATFORM ... "
         CMDID=$(aws ssm send-command --instance-ids $INSTANCE_ID \
             --document-name "AWS-RunShellScript" --comment "Pull Images" \
-            --parameters commands="apiclient exec admin sheltie ctr -a /run/dockershim.sock -n k8s.io images pull --platform $PLATFORM $IMG $ECRPWD" \
+            --parameters commands="$CTR_CMD images pull --platform $PLATFORM $IMG $ECRPWD" \
             --query "Command.CommandId" --output text)
-        aws ssm wait command-executed --command-id "$CMDID" --instance-id $INSTANCE_ID > /dev/null && echo "pull done"
+        aws ssm wait command-executed --command-id "$CMDID" --instance-id $INSTANCE_ID > /dev/null && echo "done"
     done
 done
-echo " done!"
 
 # stop EC2
 echo -n "[6/8] Stopping instance ... "
